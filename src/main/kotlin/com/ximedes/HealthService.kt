@@ -2,6 +2,7 @@ package com.ximedes
 
 import mu.KotlinLogging
 import java.time.ZonedDateTime
+import java.util.concurrent.ConcurrentHashMap
 
 internal val TIMESTAMP_KEY = "healthTimestamp"
 internal val STARTUP_TIME_KEY = "applicationStartedAt"
@@ -21,23 +22,23 @@ object HealthService {
     private val healthValues = initialHealthValue()
 
     private fun initialHealthValue() =
-            mutableMapOf<String, Any>().apply {
+            ConcurrentHashMap<String, Any>().apply {
                 put(STARTUP_TIME_KEY, startedAt)
                 put(TIMESTAMP_KEY, startedAt)
             }
 
 
     /** Functions that get called by the HealthService when refreshing */
-    private val healthCallbacks = mutableMapOf<String, suspend () -> Any>()
+    private val healthCallbacks = ConcurrentHashMap<String, suspend () -> Any>()
 
     /** The cached health data that gets returned on each call */
     private var cachedHealth = healthValues.toMap()
 
     /** Resets the HealthService to where it was when it started up */
-    fun reset(){
+    fun reset() {
         healthValues.clear()
         healthValues.putAll(initialHealthValue())
-        cachedHealth = healthValues.toMap()
+        cachedHealth = healthValues.toSortedMap()
         invalidateCache()
     }
 
