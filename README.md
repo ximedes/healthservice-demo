@@ -30,4 +30,14 @@ Getting health information as a sorted map:
 HealthService.getCurrentHealth()
 ```
 
+Exposing health information as a REST endpoint in ktor.io:
+
+```kotlin
+routing {
+    get("/health") {
+        call.respond(HttpStatusCode.OK, HealthService.getCurrentHealth())
+    }
+}
+``` 
+
 Have fun!
