@@ -17,6 +17,8 @@ fun main(args: Array<String>): Unit = main(args)
 
 fun Application.main() {
     var pageHits = 0
+    HealthService.updateItem("pageHits", pageHits)
+
 
     install(ContentNegotiation) {
         jackson {
@@ -28,7 +30,7 @@ fun Application.main() {
     }
 
     // Register a callback
-    HealthService.registerCallback("randomNumber") {
+    HealthService.registerCallback("pipeline") {
         "There are ${this.items.size} items in the ktor PipeLine"
     }
 
