@@ -32,7 +32,7 @@ fun Application.main() {
 
     routing {
         get("/health") {
-            call.respond(HttpStatusCode.OK, HealthService.getCurrentHealth())
+            call.respond(HttpStatusCode.OK, HealthService.currentHealth)
         }
 
         get("/pagehit") {

@@ -1,55 +1,64 @@
 package com.ximedes
 
 import junit.framework.TestCase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import mu.KotlinLogging
 
+val logger = KotlinLogging.logger { }
 class HealthServiceTest : TestCase() {
 
     override fun setUp() {
         HealthService.reset()
     }
 
-    fun testDirectUpdate() {
+
+    fun `test direct updates are direct`() {
         val key = "testkey"
         val value = "testvalue"
 
         runBlocking {
             // Assert that the key does not exist yet
-            assertNull(HealthService.getCurrentHealth().get(key))
+            assertNull(HealthService.currentHealth[key])
 
             // Update an item!
             HealthService.updateItem(key, value)
 
             // Check that the item is actually stored.
-            HealthService.invalidateCache()
-            assertEquals(value, HealthService.getCurrentHealth().get(key))
+            assertEquals(value, HealthService.currentHealth[key])
         }
     }
 
-    fun testCallback() {
+    fun `test should call the callback`() {
         var counter = 0
 
-        // Register a callback function
-        HealthService.registerCallback("callback") {
-            ++counter
-        }
 
-        // Assert that the HealthService calls the callback when the cache is stale
         runBlocking {
-            HealthService.invalidateCache()
-            assertEquals(1, HealthService.getCurrentHealth().get("callback"))
+            // Register a callback function
+            HealthService.registerCallback("callback") {
+                ++counter
+            }
+
+            withTimeout(2000) {
+                while (!1.equals(HealthService.currentHealth["callback"])) {
+                    delay(1)
+                }
+            }
+
+            assertEquals(1, HealthService.currentHealth["callback"])
         }
     }
 
-    fun testLogDoubleCallback() {
+    fun `test should log a warning when a callback is re-registered`() {
         LogAsserter(HealthService::class.qualifiedName!!).use { logger ->
-            HealthService.registerCallback("testcallback"){
+            HealthService.registerCallback("testcallback") {
                 "callback 1"
             }
 
             logger.assertNothingLogged()
 
-            HealthService.registerCallback("testcallback"){
+            HealthService.registerCallback("testcallback") {
                 "callback 2"
             }
 
@@ -57,3 +66,4 @@ class HealthServiceTest : TestCase() {
         }
     }
 }
+

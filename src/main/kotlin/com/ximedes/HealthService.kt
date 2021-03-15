@@ -1,6 +1,9 @@
 package com.ximedes
 
+import kotlinx.coroutines.*
+import kotlinx.coroutines.time.delay
 import mu.KotlinLogging
+import java.time.Duration
 import java.time.ZonedDateTime
 import java.util.concurrent.ConcurrentHashMap
 
@@ -14,51 +17,37 @@ private val logger = KotlinLogging.logger {}
  * information, optionally to be exposed through an endpoint.
  */
 object HealthService {
-    private val cacheSeconds: Long = 1
     private var startedAt = ZonedDateTime.now()
-    private var refreshAt = startedAt.plusSeconds(cacheSeconds)
+    private val callbackEvery = Duration.ofSeconds(1)
 
     /** Holds the values that are reported to the HealthService */
     private val healthValues = initialHealthValue()
+    private val healthCallbacks = ConcurrentHashMap<String, HealthCallBack>()
 
     private fun initialHealthValue() =
-            ConcurrentHashMap<String, Any>().apply {
-                put(STARTUP_TIME_KEY, startedAt)
-                put(TIMESTAMP_KEY, startedAt)
+        ConcurrentHashMap<String, Any>().apply {
+            put(STARTUP_TIME_KEY, startedAt)
+            put(TIMESTAMP_KEY, startedAt)
+        }
+
+    init {
+        CoroutineScope(Dispatchers.IO)
+            .launch(start = CoroutineStart.DEFAULT) {
+                while (true) {
+                    healthValues.putAll(executeCallbacks())
+                    healthValues.put(TIMESTAMP_KEY, ZonedDateTime.now())
+                    delay(callbackEvery)
+                }
             }
+    }
 
-
-    /** Functions that get called by the HealthService when refreshing */
-    private val healthCallbacks = ConcurrentHashMap<String, suspend () -> Any>()
-
-    /** The cached health data that gets returned on each call */
-    private var cachedHealth = healthValues.toMap()
+    val currentHealth: Map<String, Any>
+        get() = healthValues.toSortedMap()
 
     /** Resets the HealthService to where it was when it started up */
     fun reset() {
         healthValues.clear()
         healthValues.putAll(initialHealthValue())
-        cachedHealth = healthValues.toSortedMap()
-        invalidateCache()
-    }
-
-    fun invalidateCache() {
-        refreshAt = startedAt
-    }
-
-    /**
-     * Reports current system health. Please note that current
-     * system health is cached for one second.
-     */
-    suspend fun getCurrentHealth(): Map<String, Any> {
-        val now = ZonedDateTime.now()
-        if (refreshAt.isBefore(now)) {
-            healthValues.putAll(executeCallbacks())
-            healthValues.put(TIMESTAMP_KEY, now)
-            cachedHealth = healthValues.toMap()
-            refreshAt = now.plusSeconds(cacheSeconds)
-        }
-        return cachedHealth
     }
 
     /**
@@ -67,31 +56,43 @@ object HealthService {
     fun updateItem(key: String, value: Any) = healthValues.put(key, value)
 
     /**
-     * Registers a callback function to execute when [getCurrentHealth] is called
-     * and the cached value is stale.
+     * Registers a callback function to execute periodically.
      */
-    fun registerCallback(key: String, callback: suspend () -> Any) {
+    fun registerCallback(
+        key: String,
+        timeOut: Duration = Duration.ofSeconds(1),
+        timeoutValue: Any = "-timeout-",
+        callback: suspend () -> Any
+    ) {
         if (healthCallbacks.containsKey(key)) {
             logger.warn {
                 "A callback for key '$key' was already registered and will be " +
                         "overwritten with the new callback ${callback.javaClass}."
             }
         }
-        healthCallbacks.put(key, callback)
+        healthCallbacks.put(key, HealthCallBack(timeOut, timeoutValue, callback))
     }
 
     /** Executes (async) callbacks and returns results for each callback in a map */
     private suspend fun executeCallbacks(): Map<String, Any> =
-            HashMap<String, Any>().apply {
-                for (healthCallback in healthCallbacks) {
-                    put(
-                            healthCallback.key,
-                            try {
-                                healthCallback.value()
-                            } catch (e: Exception) {
-                                e.message ?: "failed"
-                            }
-                    )
-                }
+        HashMap<String, Any>().apply {
+            for (healthCallback in healthCallbacks) {
+                put(
+                    healthCallback.key,
+                    try {
+                        withTimeoutOrNull(healthCallback.value.duration.toMillis()) {
+                            healthCallback.value.callback()
+                        } ?: healthCallback.value.timeoutResponse
+                    } catch (e: Exception) {
+                        e.message ?: "failed"
+                    }
+                )
             }
+        }
 }
+
+private data class HealthCallBack(
+    val duration: Duration,
+    val timeoutResponse: Any,
+    val callback: suspend () -> Any
+)
