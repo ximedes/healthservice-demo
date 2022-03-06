@@ -80,7 +80,7 @@ object HealthService {
                 put(
                     healthCallback.key,
                     try {
-                        withTimeoutOrNull(healthCallback.value.duration.toMillis()) {
+                        withTimeoutOrNull(healthCallback.value.timeout.toMillis()) {
                             healthCallback.value.callback()
                         } ?: healthCallback.value.timeoutResponse
                     } catch (e: Exception) {
@@ -92,7 +92,7 @@ object HealthService {
 }
 
 private data class HealthCallBack(
-    val duration: Duration,
+    val timeout: Duration,
     val timeoutResponse: Any,
     val callback: suspend () -> Any
 )
