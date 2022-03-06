@@ -1,6 +1,7 @@
 package com.ximedes
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.time.delay
 import mu.KotlinLogging
 import java.time.Duration
@@ -24,6 +25,9 @@ object HealthService {
     private val healthValues = initialHealthValue()
     private val healthCallbacks = ConcurrentHashMap<String, HealthCallBack>()
 
+    /** Holds a cached version of the health status */
+    private val cachedHealth = MutableStateFlow<Map<String, Any>>(emptyMap())
+
     private fun initialHealthValue() =
         ConcurrentHashMap<String, Any>().apply {
             put(STARTUP_TIME_KEY, startedAt)
@@ -36,18 +40,20 @@ object HealthService {
                 while (true) {
                     healthValues.putAll(executeCallbacks())
                     healthValues.put(TIMESTAMP_KEY, ZonedDateTime.now())
+                    cachedHealth.value = healthValues.toSortedMap()
                     delay(callbackEvery)
                 }
             }
     }
 
     val currentHealth: Map<String, Any>
-        get() = healthValues.toSortedMap()
+        get() = cachedHealth.value
 
     /** Resets the HealthService to where it was when it started up */
     fun reset() {
         healthValues.clear()
         healthValues.putAll(initialHealthValue())
+        cachedHealth.value = healthValues.toSortedMap()
     }
 
     /**

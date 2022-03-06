@@ -1,20 +1,26 @@
 package com.ximedes
 
-import junit.framework.TestCase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mu.KotlinLogging
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 val logger = KotlinLogging.logger { }
-class HealthServiceTest : TestCase() {
 
-    override fun setUp() {
+class HealthServiceTest {
+
+    @BeforeEach
+    fun setUp() {
         HealthService.reset()
     }
 
 
-    fun `test direct updates are direct`() {
+    @Test
+    fun `test direct updates are delayed`() {
         val key = "testkey"
         val value = "testvalue"
 
@@ -22,14 +28,16 @@ class HealthServiceTest : TestCase() {
             // Assert that the key does not exist yet
             assertNull(HealthService.currentHealth[key])
 
-            // Update an item!
+            // Update an item
             HealthService.updateItem(key, value)
+            delay(1200)
 
             // Check that the item is actually stored.
             assertEquals(value, HealthService.currentHealth[key])
         }
     }
 
+    @Test
     fun `test should call the callback`() {
         var counter = 0
 
@@ -50,6 +58,7 @@ class HealthServiceTest : TestCase() {
         }
     }
 
+    @Test
     fun `test should log a warning when a callback is re-registered`() {
         LogAsserter(HealthService::class.qualifiedName!!).use { logger ->
             HealthService.registerCallback("testcallback") {
